@@ -1,36 +1,175 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SchemaStudio
 
-## Getting Started
+**A schema-driven admin console for building dynamic forms and data management interfaces.**
 
-First, run the development server:
+SchemaStudio allows you to design forms with advanced visibility and computed logic, preview them with validation, and explore data in a high-performance virtualized grid with inline editing capabilities.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## ✨ Features
+
+### 🎨 Form Designer
+- **Intuitive Interface**: Drag & drop from Palette → Canvas → Inspector
+- **Live Preview**: Real-time form rendering with Zod validation
+- **Smart Fields**: Computed read-only fields with live values JSON
+- **Conditional Logic**: Dynamic field visibility based on form state
+
+### 📊 Data Grid
+- **High Performance**: Virtualized rendering for 10,000+ rows
+- **Inline Editing**: Direct cell editing with validation
+- **URL State Sync**: Shareable links with sort/filter/pagination state
+- **Advanced Filtering**: Multi-column filtering with type-specific controls
+
+### 🎯 User Experience
+- **Dark Mode**: Class-based Tailwind implementation with persistence
+- **Responsive Design**: Mobile-first with adaptive layouts
+- **Accessibility**: Full keyboard navigation and ARIA support
+- **Persistence**: Schema and history automatically saved
+
+## 🛠 Tech Stack
+
+| Category | Technology |
+|----------|------------|
+| **Framework** | Next.js (App Router) + TypeScript |
+| **State Management** | Zustand with persist middleware |
+| **Drag & Drop** | @dnd-kit |
+| **Validation** | Zod runtime validation |
+| **Data Grid** | @tanstack/react-table + @tanstack/react-virtual |
+| **Styling** | Tailwind CSS |
+| **Testing** | Jest + React Testing Library, Cypress E2E |
+
+## 📁 Project Structure
+
+```
+src/
+├── app/
+│   ├── page.tsx              # Landing page
+│   ├── designer/             # Form designer interface
+│   ├── grid/                 # Data grid interface
+│   └── layout.tsx            # Theme provider & app shell
+├── modules/
+│   ├── designer/
+│   │   ├── components/       # Canvas, Palette, Inspector, Toolbar
+│   │   ├── store.ts          # Zustand store (persisted)
+│   │   └── factories.ts      # Field creation utilities
+│   ├── preview/
+│   │   └── FormRenderer.tsx  # Live form preview component
+│   ├── grid/
+│   │   └── DataGrid.tsx      # Virtualized data grid
+│   └── theme/
+│       ├── ThemeProvider.tsx # Dark/light mode management
+│       └── ThemeToggle.tsx   # Theme switching component
+└── public/                   # Static assets
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 🏗 Architecture
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### State Management Strategy
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+#### 🔄 **Designer State** (Persisted via Zustand)
+- **Schema**: Field definitions with validation, visibility, and computed logic
+- **History**: Undo/redo functionality with capped stacks
+- **UI State**: Selected field, clipboard operations
+- **Persistence**: Automatically saved to localStorage
 
-## Learn More
+#### ⚡ **Preview Values** (Ephemeral)
+- Managed within FormRenderer component
+- Runtime form data and validation states
+- Not persisted by default (can be extended if needed)
 
-To learn more about Next.js, take a look at the following resources:
+#### 🔗 **Grid State** (URL-Backed)
+- Query parameters: `?sortBy=`, `?sortDir=`, `?page=`, `?fName=`, etc.
+- **Benefits**: Shareable URLs, browser navigation, deep linking
+- Applied server-side before data slicing for optimal performance
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 🎯 Drag & Drop Implementation
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Built with `@dnd-kit` for robust touch and mouse support:
 
-## Deploy on Vercel
+- **Palette to Canvas**: Creates new fields with type definitions
+- **Canvas Reordering**: Intuitive field arrangement within sections
+- **Touch Optimized**: Distance activation prevents accidental drags
+- **Accessibility**: Keyboard-friendly with proper ARIA labels
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### 🔐 Validation & Dynamic Logic
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+#### **Zod Integration**
+- Runtime schema generation from field definitions
+- Type-safe validation with detailed error messages
+- Support for complex validation rules (required, min/max, regex)
+
+#### **Expression Engine**
+- **Conditional Visibility**: `visibleWhen` expressions for dynamic forms
+- **Computed Fields**: JavaScript expressions for calculated values
+- **Security**: Sandboxed evaluation against whitelisted values only
+
+## ⚡ Performance Optimizations
+
+### 🚀 **Virtualization**
+- Only renders visible grid rows using `@tanstack/react-virtual`
+- Handles datasets with 10,000+ records smoothly
+- Automatic scrolling and focus management
+
+### 🎯 **Smart State Management**
+- URL-level filtering/sorting before component rendering
+- Selective persistence via Zustand `partialize`
+- Memoized column definitions and computed values
+
+### 📱 **Mobile Optimizations**
+- Throttled drag events to reduce pointer churn
+- Distance-based activation for better touch experience
+- Optimized bundle size with Next.js package optimization
+
+## ♿ Accessibility Features
+
+### 📝 **Form Accessibility**
+- Inline error messages with `aria-describedby`
+- Alert regions with `role="alert"` for screen readers
+- Disabled state for computed fields to prevent confusion
+
+### 📊 **Grid Accessibility**
+- Full ARIA grid implementation (`role="grid"`, `role="row"`, `role="gridcell"`)
+- Keyboard navigation: arrow keys, Enter to edit, Escape to cancel
+- Auto-scroll to maintain focus visibility
+- High-contrast mode support
+
+### 🎨 **Visual Accessibility**
+- High-contrast variants for dark mode
+- Large touch targets for mobile interactions
+- Focus indicators and keyboard navigation patterns
+
+## 📱 Responsive Design
+
+### 🖥 **Desktop Experience**
+- Three-pane layout: Palette | Canvas | Inspector
+- Balanced column widths with resizable panels
+- Full keyboard shortcuts and power-user features
+
+### 📱 **Mobile Experience**
+- Tabbed interface for space efficiency
+- Horizontal scroll for wide data grids
+- Touch-optimized drag handles and controls
+- Adaptive typography and spacing
+
+### 🌈 **Theming System**
+- **Implementation**: Tailwind `darkMode: "class"`
+- **Persistence**: localStorage with system preference detection
+- **Smooth Transitions**: Class-based switching on `<html>` element
+- **Default Behavior**: Respects `prefers-color-scheme` on first visit
+
+## 🚀 Getting Started
+
+```bash
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+
+# Run tests
+npm test
+
+# E2E tests
+npm run cypress:open
+
+# Build for production
+npm run build
+```
