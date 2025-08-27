@@ -1,13 +1,8 @@
+// src/modules/preview/FormRenderer.tsx
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import type {
-  Field,
-  SectionField,
-  SelectField,
-  Schema,
-} from "@/modules/schema/types";
-import { z } from "zod";
+import type { Field, SectionField, SelectField, Schema } from "@/modules/schema/types";
 
 /* ────────────────────────────────────────────────────────────────────────── */
 /* Helpers: expression eval (visibleWhen / computed)                         */
@@ -24,14 +19,13 @@ function safeEval(expr: string | undefined, values: Record<string, any>) {
     ) => any;
     return fn(values, (k: string) => values[k]);
   } catch {
-    // swallow eval errors; UI should already validate expression text in Inspector
+    // swallow eval errors; UI validates expression text in Inspector
     return undefined;
   }
 }
 
 function isVisible(f: Field, values: Record<string, any>) {
   if (!("visibleWhen" in f) || !f.visibleWhen) return true;
-  // visibleWhen stored as plain string in your inspector
   const res = safeEval(f.visibleWhen as any, values);
   return res === undefined ? true : Boolean(res);
 }
@@ -58,7 +52,7 @@ function validateField(f: Field, values: Record<string, any>): string | undefine
   }
 
   // Computed fields shouldn't be user-set; skip other checks
-  if (f.computed && (f.computed as any)?.trim?.()) return undefined;
+  if ((f as any).computed && (f as any).computed.trim?.()) return undefined;
 
   // Type-specific checks
   switch (f.type) {
@@ -72,6 +66,7 @@ function validateField(f: Field, values: Record<string, any>): string | undefine
         return `Must be ≤ ${f.validation.max}.`;
       return undefined;
     }
+
     case "checkbox":
       return undefined;
 
@@ -85,9 +80,14 @@ function validateField(f: Field, values: Record<string, any>): string | undefine
     }
 
     default: {
-      // string-likes
+      // string-like inputs
       const s = v == null ? "" : String(v);
-      if (f.validation?.regex && f.type !== "checkbox" && f.type !== "number" && f.type !== "multiselect") {
+
+      // ✅ Type-safe positive narrowing: apply regex only to string-ish field types
+      const isStringField =
+        f.type === "text" || f.type === "date" || f.type === "select" || f.type === "radio";
+
+      if (f.validation?.regex && isStringField) {
         try {
           const re = new RegExp(f.validation.regex);
           if (!re.test(s)) return "Value does not match pattern.";
@@ -95,6 +95,7 @@ function validateField(f: Field, values: Record<string, any>): string | undefine
           // invalid regex provided; don't block the user here
         }
       }
+
       if (f.validation?.min !== undefined && s.length < f.validation.min)
         return `Must be at least ${f.validation.min} characters.`;
       if (f.validation?.max !== undefined && s.length > f.validation.max)
@@ -124,25 +125,30 @@ export default function FormRenderer({ schema }: { schema: Schema }) {
 
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
 
-  // Compute all computed fields whenever dependencies (values) change
+  // Compute all "computed" fields whenever schema/values change.
+  // Avoid loops by only updating when a computed value actually differs.
   useEffect(() => {
+    let changed = false;
     const next = { ...values };
     const applyComputed = (arr: Field[]) => {
       for (const f of arr) {
         const expr = (f as any).computed as string | undefined;
         if (expr && expr.trim()) {
           const val = safeEval(expr, next);
-          if (val !== undefined) next[f.key] = val;
+          if (val !== undefined && next[f.key] !== val) {
+            next[f.key] = val;
+            changed = true;
+          }
         }
         if (f.type === "section") applyComputed((f as any).children ?? []);
       }
     };
     applyComputed(schema.fields);
-    setValues(next);
+    if (changed) setValues(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [schema]); // recompute when schema changes
+  }, [schema, values]); // safe: only sets state when a computed field actually changed
 
-  // Validate on each values change (lightweight per field)
+  // Validate on each values change
   useEffect(() => {
     const nextErrors: Record<string, string | undefined> = {};
     const walk = (arr: Field[]) => {
@@ -157,7 +163,10 @@ export default function FormRenderer({ schema }: { schema: Schema }) {
 
   // input change helper
   const setValue = (key: string, v: any) => {
-    setValues((prev) => ({ ...prev, [key]: v }));
+    setValues((prev) => {
+      if (prev[key] === v) return prev;
+      return { ...prev, [key]: v };
+    });
   };
 
   // visible fields memo to avoid extra work
@@ -210,7 +219,7 @@ export default function FormRenderer({ schema }: { schema: Schema }) {
       </form>
 
       {/* Values JSON panel */}
-      <aside className="border rounded p-3 bg-neutral-50 overflow-auto max-h-[520px]">
+      <aside className="border rounded p-3 bg-neutral-50 dark:bg-neutral-900 dark:border-neutral-800 text-neutral-900 dark:text-neutral-100 overflow-auto max-h-[520px]">
         <h4 className="font-semibold mb-2">Values (live)</h4>
         <pre className="text-xs">{JSON.stringify(values, null, 2)}</pre>
       </aside>
@@ -241,12 +250,12 @@ function FieldRenderer({
   const err = errors[field.key];
   const helpId = `${field.key}-help`;
   const errId = `${field.key}-error`;
-  const describedBy = [field.helpText ? helpId : null, err ? errId : null]
-    .filter(Boolean)
-    .join(" ") || undefined;
+  const describedBy =
+    [field.helpText ? helpId : null, err ? errId : null].filter(Boolean).join(" ") || undefined;
 
   // Computed fields: read-only
   const isComputed = Boolean((field as any).computed?.trim?.());
+
   const commonLabel = (
     <label htmlFor={field.key} className="block text-sm mb-1">
       <span className="font-medium">{field.label}</span>
@@ -361,7 +370,6 @@ function FieldRenderer({
     }
 
     case "multiselect": {
-      // simple multi-select (array of values)
       const f = field as SelectField;
       const v: string[] = Array.isArray(values[field.key]) ? values[field.key] : [];
       return (
@@ -372,12 +380,7 @@ function FieldRenderer({
             multiple
             className={`w-full border rounded px-2 py-1 ${err ? "border-red-500" : ""}`}
             value={v}
-            onChange={(e) =>
-              setValue(
-                field.key,
-                Array.from(e.target.selectedOptions, (o) => o.value)
-              )
-            }
+            onChange={(e) => setValue(field.key, Array.from(e.target.selectedOptions, (o) => o.value))}
             aria-describedby={describedBy}
             disabled={isComputed}
           >
