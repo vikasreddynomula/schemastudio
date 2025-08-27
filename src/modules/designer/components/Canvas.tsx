@@ -1,7 +1,18 @@
 // src/modules/designer/components/Canvas.tsx
 "use client";
-import { DndContext, PointerSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core";
-import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
+
+import {
+  DndContext,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useDesignerStore } from "@/modules/designer/store";
 import type { Field } from "@/modules/schema/types";
@@ -16,8 +27,17 @@ function TopRow({ f, index }: { f: Field; index: number }) {
   const select = useDesignerStore((s) => s.select);
   const remove = useDesignerStore((s) => s.removeField);
   const addChild = useDesignerStore((s) => s.addChild);
+
   return (
-    <div ref={setNodeRef} style={style} className="border rounded bg-white">
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="
+        border rounded bg-white dark:bg-neutral-900 dark:border-neutral-800
+        shadow-sm
+        min-w-0
+      "
+    >
       <div
         role="button"
         tabIndex={0}
@@ -28,16 +48,32 @@ function TopRow({ f, index }: { f: Field; index: number }) {
             select(f.id);
           }
         }}
-        className="p-2 flex items-center justify-between cursor-pointer hover:bg-neutral-50"
+        className="
+          p-2 sm:p-3
+          flex items-center justify-between gap-2
+          cursor-pointer
+          hover:bg-neutral-50 dark:hover:bg-neutral-800/60
+          text-sm sm:text-base
+        "
       >
-        <div>
-          <div className="font-medium">{f.label}</div>
-          <div className="text-xs opacity-70">type: {f.type} • key: {"key" in f ? (f as any).key : ""}</div>
+        <div className="min-w-0">
+          <div className="font-medium truncate">{f.label}</div>
+          <div className="text-xs opacity-70">
+            type: {f.type} • key: {"key" in f ? (f as any).key : ""}
+          </div>
         </div>
-        <div className="flex gap-2">
+
+        <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
-            className="cursor-grab"
+            className="
+              cursor-grab select-none
+              inline-flex items-center justify-center
+              h-8 w-8 sm:h-7 sm:w-7
+              rounded
+              hover:bg-neutral-100 dark:hover:bg-neutral-800
+              border border-transparent
+            "
             aria-label="Drag"
             {...attributes}
             {...listeners}
@@ -45,9 +81,10 @@ function TopRow({ f, index }: { f: Field; index: number }) {
           >
             ↕
           </button>
+
           <button
             type="button"
-            className="underline"
+            className="underline text-xs sm:text-sm"
             onClick={(e) => {
               e.stopPropagation();
               select(f.id);
@@ -55,9 +92,10 @@ function TopRow({ f, index }: { f: Field; index: number }) {
           >
             edit
           </button>
+
           <button
             type="button"
-            className="underline text-red-600"
+            className="underline text-red-600 text-xs sm:text-sm"
             onClick={(e) => {
               e.stopPropagation();
               remove(f.id);
@@ -68,9 +106,7 @@ function TopRow({ f, index }: { f: Field; index: number }) {
         </div>
       </div>
 
-      {f.type === "section" && (
-        <SectionChildren parent={f} addChild={addChild} />
-      )}
+      {f.type === "section" && <SectionChildren parent={f} addChild={addChild} />}
     </div>
   );
 }
@@ -83,6 +119,7 @@ function ChildRow({ parentId, f, index }: { parentId: string; f: Field; index: n
   const style: React.CSSProperties = { transform: CSS.Transform.toString(transform), transition };
   const select = useDesignerStore((s) => s.select);
   const remove = useDesignerStore((s) => s.removeField);
+
   return (
     <div
       ref={setNodeRef}
@@ -96,16 +133,32 @@ function ChildRow({ parentId, f, index }: { parentId: string; f: Field; index: n
           select(f.id);
         }
       }}
-      className="mx-2 border rounded p-2 flex items-center justify-between bg-neutral-50 cursor-pointer hover:bg-neutral-100"
+      className="
+        mx-2 border rounded p-2 sm:p-2.5
+        flex items-center justify-between gap-2
+        bg-neutral-50 dark:bg-neutral-800/60
+        cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-800
+        text-sm
+      "
     >
-      <div>
-        <div className="font-medium">{f.label}</div>
-        <div className="text-xs opacity-70">type: {f.type} • key: {"key" in f ? (f as any).key : ""}</div>
+      <div className="min-w-0">
+        <div className="font-medium truncate">{f.label}</div>
+        <div className="text-xs opacity-70">
+          type: {f.type} • key: {"key" in f ? (f as any).key : ""}
+        </div>
       </div>
-      <div className="flex gap-2">
+
+      <div className="flex items-center gap-2 shrink-0">
         <button
           type="button"
-          className="cursor-grab"
+          className="
+            cursor-grab select-none
+            inline-flex items-center justify-center
+            h-8 w-8 sm:h-7 sm:w-7
+            rounded
+            hover:bg-neutral-100 dark:hover:bg-neutral-700
+            border border-transparent
+          "
           aria-label="Drag"
           {...attributes}
           {...listeners}
@@ -113,9 +166,10 @@ function ChildRow({ parentId, f, index }: { parentId: string; f: Field; index: n
         >
           ↕
         </button>
+
         <button
           type="button"
-          className="underline"
+          className="underline text-xs"
           onClick={(e) => {
             e.stopPropagation();
             select(f.id);
@@ -123,9 +177,10 @@ function ChildRow({ parentId, f, index }: { parentId: string; f: Field; index: n
         >
           edit
         </button>
+
         <button
           type="button"
-          className="underline text-red-600"
+          className="underline text-red-600 text-xs"
           onClick={(e) => {
             e.stopPropagation();
             remove(f.id);
@@ -138,21 +193,52 @@ function ChildRow({ parentId, f, index }: { parentId: string; f: Field; index: n
   );
 }
 
-function SectionChildren({ parent, addChild }: { parent: Field; addChild: (parentId: string, child: Field) => void }) {
+function SectionChildren({
+  parent,
+  addChild,
+}: {
+  parent: Field;
+  addChild: (parentId: string, child: Field) => void;
+}) {
   const children: Field[] = (parent as any).children ?? [];
+
   return (
-    <div className="pl-4 pb-2 space-y-2">
-      <div className="flex gap-2 px-2">
-        <button type="button" className="border rounded px-2 py-0.5 text-xs" onClick={() => addChild(parent.id, createField("text", "Text") as any)}>+ Text</button>
-        <button type="button" className="border rounded px-2 py-0.5 text-xs" onClick={() => addChild(parent.id, createField("number", "Number") as any)}>+ Number</button>
-        <button type="button" className="border rounded px-2 py-0.5 text-xs" onClick={() => addChild(parent.id, createField("select", "Select") as any)}>+ Select</button>
+    <div className="pl-3 sm:pl-4 pb-2 space-y-2">
+      {/* Quick add buttons: wrap on small screens */}
+      <div className="flex flex-wrap items-center gap-2 px-2">
+        <button
+          type="button"
+          className="border rounded px-2 py-0.5 text-xs hover:bg-neutral-50 dark:hover:bg-neutral-800 dark:border-neutral-700"
+          onClick={() => addChild(parent.id, createField("text", "Text") as any)}
+        >
+          + Text
+        </button>
+        <button
+          type="button"
+          className="border rounded px-2 py-0.5 text-xs hover:bg-neutral-50 dark:hover:bg-neutral-800 dark:border-neutral-700"
+          onClick={() => addChild(parent.id, createField("number", "Number") as any)}
+        >
+          + Number
+        </button>
+        <button
+          type="button"
+          className="border rounded px-2 py-0.5 text-xs hover:bg-neutral-50 dark:hover:bg-neutral-800 dark:border-neutral-700"
+          onClick={() => addChild(parent.id, createField("select", "Select") as any)}
+        >
+          + Select
+        </button>
       </div>
+
       <SortableContext items={children.map((c) => c.id)} strategy={verticalListSortingStrategy}>
         <div className="space-y-2">
           {children.length ? (
-            children.map((c, i) => <ChildRow key={c.id} parentId={parent.id} f={c} index={i} />)
+            children.map((c, i) => (
+              <ChildRow key={c.id} parentId={parent.id} f={c} index={i} />
+            ))
           ) : (
-            <p className="mx-2 text-xs opacity-70">No children yet — use the buttons above to add.</p>
+            <p className="mx-2 text-xs opacity-70">
+              No children yet — use the buttons above to add.
+            </p>
           )}
         </div>
       </SortableContext>
@@ -164,15 +250,19 @@ export function Canvas() {
   const fields = useDesignerStore((s) => s.schema.fields);
   const moveField = useDesignerStore((s) => s.moveField);
   const moveChild = useDesignerStore((s) => s.moveChild);
-  const sensors = useSensors(useSensor(PointerSensor));
+
+  // Slightly higher activation distance improves touch UX
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const onDragEnd = (e: DragEndEvent) => {
     const activeContainer = e.active.data.current?.containerId as string | undefined;
     const overContainer = e.over?.data.current?.containerId as string | undefined;
     const fromIndex = e.active.data.current?.index as number | undefined;
     const toIndex = e.over?.data.current?.index as number | undefined;
+
     if (!activeContainer || !overContainer || fromIndex === undefined || toIndex === undefined) return;
     if (activeContainer !== overContainer) return;
+
     if (activeContainer === "root") {
       if (fromIndex !== toIndex) moveField(fromIndex, toIndex);
       return;
@@ -182,14 +272,21 @@ export function Canvas() {
 
   return (
     <DndContext sensors={sensors} onDragEnd={onDragEnd}>
-      <SortableContext items={fields.map((f) => f.id)} strategy={verticalListSortingStrategy}>
-        <div className="space-y-2">
-          {fields.length === 0 && <p className="opacity-70">Add fields from the palette →</p>}
-          {fields.map((f, i) => (
-            <TopRow key={f.id} f={f} index={i} />
-          ))}
+      {/* horizontal safety wrapper for long content on tiny screens */}
+      <div className="overflow-x-auto">
+        <div className="min-w-0">
+          <SortableContext items={fields.map((f) => f.id)} strategy={verticalListSortingStrategy}>
+            <div className="space-y-2">
+              {fields.length === 0 && (
+                <p className="opacity-70 text-sm">Add fields from the palette →</p>
+              )}
+              {fields.map((f, i) => (
+                <TopRow key={f.id} f={f} index={i} />
+              ))}
+            </div>
+          </SortableContext>
         </div>
-      </SortableContext>
+      </div>
     </DndContext>
   );
 }

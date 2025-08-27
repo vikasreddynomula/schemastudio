@@ -8,25 +8,40 @@ export function Toolbar() {
   const importSchema = useDesignerStore((s) => s.importSchema);
 
   return (
-    <div className="flex items-center gap-2 sticky top-0 z-20 bg-white/90 backdrop-blur p-2 rounded border">
-      <button type="button" className="border rounded px-2 py-1" onClick={undo}>
-        Undo
-      </button>
-      <button type="button" className="border rounded px-2 py-1" onClick={redo}>
-        Redo
-      </button>
-      <button
-        type="button"
-        className="border rounded px-2 py-1"
+    <div
+      className="
+        sticky top-0 z-20
+        flex items-center gap-2
+        p-2 rounded
+        bg-white/90 backdrop-blur border border-neutral-200
+        text-neutral-900
+        shadow-sm
+        dark:bg-neutral-900/85 dark:border-neutral-800 dark:text-neutral-100
+      "
+    >
+      <ToolbarButton onClick={undo} label="Undo" />
+      <ToolbarButton onClick={redo} label="Redo" />
+
+      <ToolbarButton
         onClick={() => {
           const txt = exportSchema();
           navigator.clipboard.writeText(txt);
           alert("Schema copied to clipboard");
         }}
+        label="Export"
+      />
+
+      <label
+        className="
+          inline-flex items-center
+          px-2 py-1 rounded border border-neutral-300
+          text-sm
+          cursor-pointer select-none
+          hover:bg-neutral-50 active:bg-neutral-100
+          focus:outline-none focus:ring-2 focus:ring-blue-500/50
+          dark:border-neutral-700 dark:hover:bg-neutral-800 dark:active:bg-neutral-700
+        "
       >
-        Export
-      </button>
-      <label className="border rounded px-2 py-1 cursor-pointer">
         Import
         <input
           type="file"
@@ -41,5 +56,31 @@ export function Toolbar() {
         />
       </label>
     </div>
+  );
+}
+
+function ToolbarButton({
+  onClick,
+  label,
+}: {
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="
+        inline-flex items-center
+        px-2 py-1 rounded
+        border border-neutral-300
+        text-sm
+        hover:bg-neutral-50 active:bg-neutral-100
+        focus:outline-none focus:ring-2 focus:ring-blue-500/50
+        dark:border-neutral-700 dark:hover:bg-neutral-800 dark:active:bg-neutral-700
+      "
+    >
+      {label}
+    </button>
   );
 }

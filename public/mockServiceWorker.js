@@ -92,6 +92,17 @@ addEventListener('message', async function (event) {
     }
   }
 })
+function safeId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  // fallback: generate UUID manually
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
 
 addEventListener('fetch', function (event) {
   // Bypass navigation requests.
@@ -115,7 +126,7 @@ addEventListener('fetch', function (event) {
     return
   }
 
-  const requestId = crypto.randomUUID()
+  const requestId = safeId();
   event.respondWith(handleRequest(event, requestId))
 })
 

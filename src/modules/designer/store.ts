@@ -1,216 +1,210 @@
+"use client";
+
 import { create } from "zustand";
-import type { Schema, Field } from "@/modules/schema/types";
+import { persist, createJSONStorage } from "zustand/middleware";
+import { nanoid } from "nanoid";
+import type { Field, Schema } from "@/modules/schema/types";
 
-export type DesignerState = {
+// ---- your existing types (simplified for brevity) ----
+type DesignerStore = {
   schema: Schema;
+  history: { past: Schema[]; future: Schema[] };
   selectedId?: string;
-  clipboard?: Field | null;
-  history: { past: Schema[]; present: Schema; future: Schema[] };
-};
+  clipboard?: Field[] | null;
 
-export type DesignerActions = {
+  // actions (use your own implementations if they exist)
+  setSchema: (s: Schema) => void;
+  importSchema: (s: Schema) => void;
+  exportSchema: () => string;
+
   select: (id?: string) => void;
-  addField: (field: Field) => void;
-  addChild: (parentId: string, child: Field) => void;
   updateField: (id: string, patch: Partial<Field>) => void;
+  addField: (f: Field) => void;
+  addChild: (sectionId: string, f: Field) => void;
   removeField: (id: string) => void;
   moveField: (from: number, to: number) => void;
   moveChild: (parentId: string, from: number, to: number) => void;
-  copy: (id: string) => void;
-  paste: (toIndex?: number) => void;
+
+  copy: (id: string | string[]) => void;
+  paste: (targetSectionId?: string) => void;
+
   undo: () => void;
   redo: () => void;
-  importSchema: (schema: Schema) => void;
-  exportSchema: () => string;
 };
 
-type Store = DesignerState & DesignerActions;
+const STORAGE_KEY = "schemastudio_designer_v1";
 
-const emptySchema: Schema = { version: 1, fields: [] };
+export const useDesignerStore = create<DesignerStore>()(
+  persist(
+    (set, get) => ({
+      schema: { version: 1, fields: [] },
+      history: { past: [], future: [] },
+      selectedId: undefined,
+      clipboard: null,
 
-function pushHistory(state: DesignerState, next: Schema): DesignerState {
-  return {
-    ...state,
-    schema: next,
-    history: {
-      past: [...state.history.past, state.history.present],
-      present: next,
-      future: [],
-    },
-  };
-}
+      setSchema: (s) => set({ schema: s }),
+      importSchema: (s) => set({ schema: s, history: { past: [], future: [] } }),
+      exportSchema: () => JSON.stringify(get().schema, null, 2),
 
-function findFieldRecursive(fields: Field[], id: string): Field | undefined {
-  for (const f of fields) {
-    if (f.id === id) return f;
-    if (f.type === "section") {
-      const hit = findFieldRecursive((f as any).children, id);
-      if (hit) return hit;
+      select: (id) => set({ selectedId: id }),
+
+      updateField: (id, patch) =>
+        set((st) => {
+          const next = structuredClone(st.schema);
+          const visit = (arr: Field[]): boolean => {
+            const i = arr.findIndex((f) => f.id === id);
+            if (i >= 0) {
+              arr[i] = { ...arr[i], ...patch } as Field;
+              return true;
+            }
+            for (const f of arr) {
+              const kids = (f as any).children as Field[] | undefined;
+              if (kids && visit(kids)) return true;
+            }
+            return false;
+          };
+          visit(next.fields);
+          return { schema: next };
+        }),
+
+      addField: (f) =>
+        set((st) => ({ schema: { ...st.schema, fields: [...st.schema.fields, f] } })),
+
+      addChild: (sectionId, f) =>
+        set((st) => {
+          const next = structuredClone(st.schema);
+          const stack: Field[] = [...next.fields];
+          while (stack.length) {
+            const node = stack.pop()!;
+            if (node.id === sectionId) {
+              (node as any).children = (node as any).children ?? [];
+              (node as any).children.push(f);
+              break;
+            }
+            const kids = (node as any).children as Field[] | undefined;
+            if (kids) stack.push(...kids);
+          }
+          return { schema: next };
+        }),
+
+      removeField: (id) =>
+        set((st) => {
+          const next = structuredClone(st.schema);
+          const prune = (arr: Field[]) =>
+            arr.filter((f) => {
+              if (f.id === id) return false;
+              if ((f as any).children) (f as any).children = prune((f as any).children);
+              return true;
+            });
+          next.fields = prune(next.fields);
+          return { schema: next };
+        }),
+
+      moveField: (from, to) =>
+        set((st) => {
+          const arr = [...st.schema.fields];
+          const [item] = arr.splice(from, 1);
+          arr.splice(to, 0, item);
+          return { schema: { ...st.schema, fields: arr } };
+        }),
+
+      moveChild: (parentId, from, to) =>
+        set((st) => {
+          const next = structuredClone(st.schema);
+          const stack: Field[] = [...next.fields];
+          while (stack.length) {
+            const node = stack.pop()!;
+            if (node.id === parentId) {
+              const kids = ((node as any).children ?? []) as Field[];
+              const [item] = kids.splice(from, 1);
+              kids.splice(to, 0, item);
+              (node as any).children = kids;
+              break;
+            }
+            const kids = (node as any).children as Field[] | undefined;
+            if (kids) stack.push(...kids);
+          }
+          return { schema: next };
+        }),
+
+      copy: (ids) => {
+        const idList = Array.isArray(ids) ? ids : [ids];
+        const pick = (arr: Field[], id: string): Field | undefined => {
+          for (const f of arr) {
+            if (f.id === id) return f;
+            const kids = (f as any).children as Field[] | undefined;
+            const hit = kids && pick(kids, id);
+            if (hit) return hit;
+          }
+        };
+        const deepClone = (f: Field): Field => ({
+          ...f,
+          id: nanoid(),
+          children: (f as any).children?.map(deepClone),
+        } as any);
+        const fields = idList.map((id) => pick(get().schema.fields, id)).filter(Boolean) as Field[];
+        set({ clipboard: fields.map(deepClone) });
+      },
+
+      paste: (targetSectionId) =>
+        set((st) => {
+          if (!st.clipboard?.length) return {};
+          const next = structuredClone(st.schema);
+          if (targetSectionId) {
+            const stack: Field[] = [...next.fields];
+            while (stack.length) {
+              const node = stack.pop()!;
+              if (node.id === targetSectionId) {
+                (node as any).children = (node as any).children ?? [];
+                (node as any).children.push(...structuredClone(st.clipboard));
+                return { schema: next };
+              }
+              const kids = (node as any).children as Field[] | undefined;
+              if (kids) stack.push(...kids);
+            }
+          }
+          next.fields.push(...structuredClone(st.clipboard));
+          return { schema: next };
+        }),
+
+      // Simple history example (cap to 20)
+      undo: () => {
+        const { history, schema } = get();
+        const prev = history.past[history.past.length - 1];
+        if (!prev) return;
+        set({
+          schema: prev,
+          history: {
+            past: history.past.slice(0, -1),
+            future: [schema, ...history.future].slice(0, 20),
+          },
+        });
+      },
+      redo: () => {
+        const { history, schema } = get();
+        const next = history.future[0];
+        if (!next) return;
+        set({
+          schema: next,
+          history: {
+            past: [...history.past, schema].slice(-20),
+            future: history.future.slice(1),
+          },
+        });
+      },
+    }),
+    {
+      name: STORAGE_KEY,
+      version: 1,
+      storage: createJSONStorage(() => localStorage),
+      // Only persist what we need (schema/history/selectedId)
+      partialize: (state) => ({
+        schema: state.schema,
+        history: state.history,
+        selectedId: state.selectedId,
+      }),
+      // Optional: migrate older versions here
+      // migrate: (persisted, version) => persisted,
     }
-  }
-  return undefined;
-}
-
-function mapFieldsRecursive(fields: Field[], fn: (f: Field) => Field): Field[] {
-  return fields.map((f) => {
-    const withChildren =
-      f.type === "section"
-        ? { ...(f as any), children: mapFieldsRecursive((f as any).children, fn) }
-        : f;
-    return fn(withChildren);
-  });
-}
-
-function removeFieldRecursive(fields: Field[], id: string): Field[] {
-  const out: Field[] = [];
-  for (const f of fields) {
-    if (f.id === id) continue;
-    if (f.type === "section") {
-      out.push({ ...(f as any), children: removeFieldRecursive((f as any).children, id) });
-    } else {
-      out.push(f);
-    }
-  }
-  return out;
-}
-
-function addChildRecursive(fields: Field[], parentId: string, child: Field): Field[] {
-  return fields.map((f) => {
-    if (f.id === parentId && f.type === "section") {
-      return { ...(f as any), children: [...(f as any).children, child] };
-    }
-    if (f.type === "section") {
-      return { ...(f as any), children: addChildRecursive((f as any).children, parentId, child) };
-    }
-    return f;
-  });
-}
-
-function moveChildRecursive(fields: Field[], parentId: string, from: number, to: number): Field[] {
-  return fields.map((f) => {
-    if (f.id === parentId && f.type === "section") {
-      const children = [...(f as any).children];
-      const [it] = children.splice(from, 1);
-      if (!it) return f;
-      children.splice(to, 0, it);
-      return { ...(f as any), children };
-    }
-    if (f.type === "section") {
-      return { ...(f as any), children: moveChildRecursive((f as any).children, parentId, from, to) };
-    }
-    return f;
-  });
-}
-
-export const useDesignerStore = create<Store>((set, get) => ({
-  schema: emptySchema,
-  selectedId: undefined,
-  clipboard: null,
-  history: { past: [], present: emptySchema, future: [] },
-
-  select: (id) => set({ selectedId: id }),
-
-  addField: (field) =>
-    set((s) => {
-      const next: Schema = { ...s.schema, fields: [...s.schema.fields, field] };
-      return pushHistory(s, next);
-    }),
-
-  addChild: (parentId, child) =>
-    set((s) => {
-      const next: Schema = { ...s.schema, fields: addChildRecursive(s.schema.fields, parentId, child) };
-      return pushHistory(s, next);
-    }),
-
-  updateField: (id, patch) =>
-    set((s) => {
-      const next: Schema = {
-        ...s.schema,
-        fields: mapFieldsRecursive(s.schema.fields, (f) => (f.id === id ? { ...f, ...patch } : f)),
-      };
-      return pushHistory(s, next);
-    }),
-
-  removeField: (id) =>
-    set((s) => {
-      const next: Schema = { ...s.schema, fields: removeFieldRecursive(s.schema.fields, id) };
-      const clearedSel = s.selectedId === id ? undefined : s.selectedId;
-      return pushHistory({ ...s, selectedId: clearedSel }, next);
-    }),
-
-  moveField: (from, to) =>
-    set((s) => {
-      if (from === to) return s;
-      const arr = [...s.schema.fields];
-      const [item] = arr.splice(from, 1);
-      if (!item) return s;
-      arr.splice(to, 0, item);
-      const next: Schema = { ...s.schema, fields: arr };
-      return pushHistory(s, next);
-    }),
-
-  moveChild: (parentId, from, to) =>
-    set((s) => {
-      const next: Schema = { ...s.schema, fields: moveChildRecursive(s.schema.fields, parentId, from, to) };
-      return pushHistory(s, next);
-    }),
-
-  copy: (id) =>
-    set((s) => ({
-      ...s,
-      clipboard: findFieldRecursive(s.schema.fields, id) ?? null,
-    })),
-
-  paste: (toIndex) =>
-    set((s) => {
-      const src = s.clipboard;
-      if (!src) return s;
-      const clone: Field = {
-        ...(src as any),
-        id: crypto.randomUUID(),
-        key:
-          (src as any).key != null
-            ? `${(src as any).key}_${Math.random().toString(36).slice(2, 6)}`
-            : crypto.randomUUID(),
-      };
-      const arr = [...s.schema.fields];
-      if (typeof toIndex === "number") arr.splice(toIndex, 0, clone);
-      else arr.push(clone);
-      const next: Schema = { ...s.schema, fields: arr };
-      return pushHistory(s, next);
-    }),
-
-  undo: () =>
-    set((s) => {
-      const past = [...s.history.past];
-      const prev = past.pop();
-      if (!prev) return s;
-      const future = [s.history.present, ...s.history.future];
-      return { ...s, schema: prev, history: { past, present: prev, future } };
-    }),
-
-  redo: () =>
-    set((s) => {
-      const [next, ...restFuture] = s.history.future;
-      if (!next) return s;
-      const past = [...s.history.past, s.history.present];
-      return { ...s, schema: next, history: { past, present: next, future: restFuture } };
-    }),
-
-  importSchema: (schema) => set((s) => pushHistory(s, schema)),
-
-  exportSchema: () => JSON.stringify(get().schema, null, 2),
-}));
-
-if (typeof window !== "undefined") {
-  window.addEventListener("keydown", (e) => {
-    const store = useDesignerStore.getState();
-    const isMac = navigator.platform.toUpperCase().includes("MAC");
-    const mod = isMac ? e.metaKey : e.ctrlKey;
-    if (mod && e.key.toLowerCase() === "z") {
-      e.preventDefault();
-      if (e.shiftKey) store.redo();
-      else store.undo();
-    }
-  });
-}
+  )
+);
