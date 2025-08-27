@@ -155,6 +155,13 @@ Built with `@dnd-kit` for robust touch and mouse support:
 - **Smooth Transitions**: Class-based switching on `<html>` element
 - **Default Behavior**: Respects `prefers-color-scheme` on first visit
 
+### **Deployment**
+
+- used vercel to deploy the main code is in main branch
+- github repo URL: https://github.com/vikasreddynomula/schemastudio/
+- Deployed App URL: https://schemastudio.vercel.app/
+
+
 ## 🚀 Getting Started
 
 ```bash
@@ -163,12 +170,6 @@ npm install
 
 # Start development server
 npm run dev
-
-# Run tests
-npm test
-
-# E2E tests
-npm run cypress:open
 
 # Build for production
 npm run build
