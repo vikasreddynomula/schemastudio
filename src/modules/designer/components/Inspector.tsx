@@ -256,11 +256,19 @@ export function Inspector() {
       </aside>
 
       <aside className="border rounded p-3">
-        <h3 className="font-semibold">Schema JSON</h3>
-        <pre className="border rounded p-3 bg-neutral-50 text-xs overflow-auto max-h-64">
-          {JSON.stringify(schema, null, 2)}
-        </pre>
-      </aside>
+  <h3 className="font-semibold">Schema JSON</h3>
+  <pre
+    className="
+      border rounded p-3
+      bg-neutral-50 text-neutral-900
+      dark:bg-neutral-900 dark:text-neutral-100 dark:border-neutral-700
+      text-xs overflow-auto max-h-64
+    "
+  >
+    {JSON.stringify(schema, null, 2)}
+  </pre>
+</aside>
+
     </div>
   );
 }
