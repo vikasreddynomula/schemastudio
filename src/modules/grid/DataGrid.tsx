@@ -1,7 +1,5 @@
 "use client";
 
-import * as React from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   ColumnDef,
   flexRender,
@@ -10,104 +8,255 @@ import {
   SortingState,
   useReactTable,
 } from "@tanstack/react-table";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { useSearchParams, useRouter } from "next/navigation";
+import { useMemo, useRef, useState } from "react";
 
-type RowT = { id: number; name: string; count: number };
+// Row type
+export type Row = {
+  id: number;
+  name: string;
+  age: number;
+  role: string;
+};
 
-const data: RowT[] = Array.from({ length: 10_000 }, (_, i) => ({
-  id: i + 1,
-  name: `Row ${i + 1}`,
-  count: Math.floor(Math.random() * 1000),
-}));
+type Props = {
+  data?: Row[];
+  page: number;        // current page index (0-based)
+  pageSize: number;    // rows per page
+  total: number;       // total rows across all pages
+};
 
-const columns: ColumnDef<RowT>[] = [
-  { header: "ID", accessorKey: "id" },
-  { header: "Name", accessorKey: "name" },
-  { header: "Count", accessorKey: "count" },
-];
+export default function DataGrid({
+  data = [],
+  page,
+  pageSize,
+  total,
+}: Props) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const parentRef = useRef<HTMLDivElement>(null);
 
-const GRID_TEMPLATE = "120px 1fr 140px";
+  // --- URL-backed sorting state ---
+  const sortBy = searchParams.get("sortBy") || "id";
+  const sortDir = (searchParams.get("sortDir") as "asc" | "desc") || "asc";
+  const sorting: SortingState = useMemo(
+    () => [{ id: sortBy, desc: sortDir === "desc" }],
+    [sortBy, sortDir]
+  );
 
-export default function DataGrid() {
-  const [sorting, setSorting] = React.useState<SortingState>([]);
-  const table = useReactTable<RowT>({
+  const updateSearchParams = (updates: Record<string, string>) => {
+    const sp = new URLSearchParams(searchParams.toString());
+    for (const [k, v] of Object.entries(updates)) sp.set(k, v);
+    router.replace("?" + sp.toString());
+  };
+
+  const toggleSort = (id: string) => {
+    if (sortBy === id) {
+      updateSearchParams({ sortBy: id, sortDir: sortDir === "asc" ? "desc" : "asc" });
+    } else {
+      updateSearchParams({ sortBy: id, sortDir: "asc" });
+    }
+  };
+
+  // --- inline editing state ---
+  const [editingCell, setEditingCell] = useState<{ rowId: number; colId: string } | null>(null);
+  const [editedData, setEditedData] = useState<Record<string, any>>({});
+
+  // --- columns (editable cells) ---
+  const columns = useMemo<ColumnDef<Row>[]>(
+    () => [
+      { accessorKey: "id", header: "ID", cell: (info) => info.getValue<number>() },
+      {
+        accessorKey: "name",
+        header: "Name",
+        cell: (info) => {
+          const row = info.row.original;
+          const isEditing = editingCell?.rowId === row.id && editingCell.colId === "name";
+          if (isEditing) {
+            return (
+              <input
+                className="border px-1 w-full"
+                autoFocus
+                value={editedData.name ?? row.name}
+                onChange={(e) => setEditedData((d) => ({ ...d, name: e.target.value }))}
+                onBlur={() => {
+                  row.name = editedData.name ?? row.name;
+                  setEditingCell(null);
+                }}
+              />
+            );
+          }
+          return (
+            <span onDoubleClick={() => setEditingCell({ rowId: row.id, colId: "name" })}>
+              {row.name}
+            </span>
+          );
+        },
+      },
+      {
+        accessorKey: "age",
+        header: "Age",
+        cell: (info) => {
+          const row = info.row.original;
+          const isEditing = editingCell?.rowId === row.id && editingCell.colId === "age";
+          if (isEditing) {
+            return (
+              <input
+                type="number"
+                className="border px-1 w-20"
+                autoFocus
+                value={editedData.age ?? row.age}
+                onChange={(e) =>
+                  setEditedData((d) => ({ ...d, age: Number(e.target.value) }))
+                }
+                onBlur={() => {
+                  row.age = editedData.age ?? row.age;
+                  setEditingCell(null);
+                }}
+              />
+            );
+          }
+          return (
+            <span onDoubleClick={() => setEditingCell({ rowId: row.id, colId: "age" })}>
+              {row.age}
+            </span>
+          );
+        },
+      },
+      {
+        accessorKey: "role",
+        header: "Role",
+        cell: (info) => {
+          const row = info.row.original;
+          const isEditing = editingCell?.rowId === row.id && editingCell.colId === "role";
+          if (isEditing) {
+            return (
+              <select
+                className="border px-1"
+                autoFocus
+                value={editedData.role ?? row.role}
+                onChange={(e) => setEditedData((d) => ({ ...d, role: e.target.value }))}
+                onBlur={() => {
+                  row.role = editedData.role ?? row.role;
+                  setEditingCell(null);
+                }}
+              >
+                <option>Admin</option>
+                <option>User</option>
+                <option>Guest</option>
+              </select>
+            );
+          }
+          return (
+            <span onDoubleClick={() => setEditingCell({ rowId: row.id, colId: "role" })}>
+              {row.role}
+            </span>
+          );
+        },
+      },
+    ],
+    [editingCell, editedData]
+  );
+
+  // react-table instance
+  const table = useReactTable({
     data,
     columns,
     state: { sorting },
-    onSortingChange: setSorting,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
   });
 
-  const parentRef = React.useRef<HTMLDivElement | null>(null);
+  // virtualization for current page only
+  const rowModel = table.getRowModel();
   const rowVirtualizer = useVirtualizer({
-    count: table.getRowModel().rows.length,
+    count: rowModel?.rows.length ?? 0,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 40,
-    overscan: 10,
+    estimateSize: () => 36,
+    overscan: 8,
   });
 
-  const items = rowVirtualizer.getVirtualItems();
-  const totalSize = rowVirtualizer.getTotalSize();
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
-    <div className="space-y-2">
-      <div className="text-2xl font-semibold">Demo Data Grid</div>
-
-      <div
-        ref={parentRef}
-        className="border rounded relative bg-white"
-        style={{ height: "70vh", overflow: "auto" }}
-      >
-        <div
-          className="sticky top-0 z-10 bg-white/95 backdrop-blur shadow-sm border-b"
-          style={{ display: "grid", gridTemplateColumns: GRID_TEMPLATE }}
+    <div className="border rounded overflow-hidden">
+      {/* Toolbar */}
+      <div className="flex items-center gap-3 p-2">
+        <span className="text-sm">
+          Sort: <b>{sortBy}</b> ({sortDir})
+        </span>
+        <button
+          disabled={page <= 0}
+          className="px-2 py-1 border rounded disabled:opacity-50"
+          onClick={() => updateSearchParams({ page: String(Math.max(page - 1, 0)) })}
         >
-          {table.getHeaderGroups().map((hg) =>
-            hg.headers.map((h) => (
-              <div
-                key={h.id}
-                className="px-3 py-2 text-sm font-medium select-none cursor-pointer"
-                onClick={h.column.getToggleSortingHandler()}
-              >
-                {h.isPlaceholder
-                  ? null
-                  : flexRender(h.column.columnDef.header, h.getContext())}
-                {{ asc: " ▲", desc: " ▼" }[h.column.getIsSorted() as string] ?? null}
-              </div>
-            ))
-          )}
-        </div>
-
-        <div
-          className="relative"
-          style={{ height: totalSize }}
+          Prev
+        </button>
+        <span className="text-sm">
+          Page {page + 1} / {totalPages}
+        </span>
+        <button
+          disabled={page + 1 >= totalPages}
+          className="px-2 py-1 border rounded disabled:opacity-50"
+          onClick={() => updateSearchParams({ page: String(page + 1) })}
         >
-          {items.map((vi) => {
-            const row = table.getRowModel().rows[vi.index];
+          Next
+        </button>
+      </div>
+
+      {/* Header */}
+      <div className="sticky top-0 z-10 flex border-t border-b bg-neutral-50">
+        {table.getFlatHeaders().map((header) => (
+          <div
+            key={header.id}
+            className="flex-1 p-2 text-sm font-medium cursor-pointer select-none"
+            onClick={() => toggleSort(header.column.id)}
+            title="Click to sort"
+          >
+            {flexRender(header.column.columnDef.header, header.getContext())}
+            {sortBy === header.column.id ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
+          </div>
+        ))}
+      </div>
+
+      {/* Body (virtualized) */}
+      <div ref={parentRef} className="h-[400px] overflow-auto">
+        <div
+          style={{
+            height: `${rowVirtualizer.getTotalSize()}px`,
+            position: "relative",
+          }}
+        >
+          {rowVirtualizer.getVirtualItems().map((vr) => {
+            const row = rowModel.rows[vr.index];
             return (
               <div
-                key={vi.key}
-                className="absolute inset-x-0 border-b"
+                key={row.id}
                 style={{
-                  transform: `translateY(${vi.start}px)`,
-                  height: vi.size,
-                  display: "grid",
-                  gridTemplateColumns: GRID_TEMPLATE,
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  height: `${vr.size}px`,
+                  transform: `translateY(${vr.start}px)`,
+                  display: "flex",
+                  borderBottom: "1px solid #e5e7eb",
                 }}
               >
                 {row.getVisibleCells().map((cell) => (
-                  <div key={cell.id} className="px-3 py-2 text-sm">
+                  <div key={cell.id} className="flex-1 p-2 border-r last:border-r-0">
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </div>
                 ))}
               </div>
             );
           })}
+          {rowModel.rows.length === 0 && (
+            <div className="p-4 text-sm text-center opacity-70">No rows</div>
+          )}
         </div>
       </div>
-
-      {/* Simple page controls (optional) */}
-      {/* Add pagination/filtering later with MSW + React Query */}
     </div>
   );
 }

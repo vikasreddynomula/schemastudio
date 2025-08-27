@@ -37,15 +37,19 @@ export function DesignerBoard() {
   );
 
   const onDragEnd = (e: DragEndEvent) => {
+    console.log("DRAG END", { active: e.active, over: e.over });
+
     const from = e.active.data.current as any;
     const overId = e.over?.id as string | undefined;
-
+  
+    console.log("FROM", from, "OVER", overId);
+  
     if (!from) return;
-
+  
     if (from.from === "palette") {
       if (!overId) return;
       const fld = createField(from.type, from.label) as any;
-
+  
       if (overId === "root") {
         addField(fld);
         return;
@@ -55,6 +59,7 @@ export function DesignerBoard() {
         addChild(sectionId, fld);
         return;
       }
+    }
 
       const overField = findFieldById(schema.fields, overId);
       if (overField?.type === "section") {

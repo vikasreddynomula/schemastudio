@@ -2,10 +2,7 @@
 
 import FormRenderer from "@/modules/preview/FormRenderer";
 import { useDesignerStore } from "@/modules/designer/store";
-import type {
-  ChangeEvent,
-  ReactNode,
-} from "react";
+import type { ChangeEvent, ReactNode } from "react";
 import type {
   Field,
   SelectField,
@@ -13,6 +10,18 @@ import type {
   ArrayField,
   Schema,
 } from "@/modules/schema/types";
+
+// --- util to validate expressions ---
+function tryCompile(expr: string) {
+  if (!expr?.trim()) return null;
+  try {
+    // eslint-disable-next-line no-new-func
+    new Function("values", "get", `return (${expr});`);
+    return null;
+  } catch (err: any) {
+    return err.message;
+  }
+}
 
 export function Inspector() {
   const schema = useDesignerStore((s) => s.schema);
@@ -65,12 +74,6 @@ export function Inspector() {
       },
     });
 
-  const onVisibleWhen = (e: ChangeEvent<HTMLInputElement>) =>
-    field && update(field.id, { visibleWhen: e.target.value || undefined });
-
-  const onComputed = (e: ChangeEvent<HTMLInputElement>) =>
-    field && update(field.id, { computed: e.target.value || undefined });
-
   return (
     <div className="grid grid-rows-[auto_auto_1fr] gap-3">
       <aside className="space-y-2 border rounded p-3">
@@ -78,6 +81,7 @@ export function Inspector() {
 
         {field ? (
           <div className="space-y-2">
+            {/* Basic text props */}
             <Labeled label="Key (unique)">
               <input
                 className="w-full border rounded px-2 py-1"
@@ -122,7 +126,7 @@ export function Inspector() {
               <label htmlFor="req">Required</label>
             </div>
 
-            {/* Default value editor (simple text for now) */}
+            {/* Default value */}
             <Labeled label="Default Value">
               <input
                 className="w-full border rounded px-2 py-1"
@@ -160,28 +164,24 @@ export function Inspector() {
             </div>
 
             {/* Expressions */}
-            <Labeled label="Visible When (expression)">
-              <input
-                className="w-full border rounded px-2 py-1"
-                placeholder="age >= 18 && subscribed"
-                value={field.visibleWhen ?? ""}
-                onChange={onVisibleWhen}
-              />
-            </Labeled>
+            <ExpressionInput
+              label="Visible When (expression)"
+              value={field.visibleWhen ?? ""}
+              placeholder="age >= 18 && subscribed"
+              onChange={(val) => update(field.id, { visibleWhen: val })}
+            />
             <Help>
               <b>Tip:</b> Reference other field <code>key</code>s, e.g.{" "}
               <code>age &gt;= 18</code> or{" "}
               <code>firstName + " " + lastName</code>.
             </Help>
 
-            <Labeled label="Computed (expression)">
-              <input
-                className="w-full border rounded px-2 py-1"
-                placeholder="firstName + ' ' + lastName"
-                value={field.computed ?? ""}
-                onChange={onComputed}
-              />
-            </Labeled>
+            <ExpressionInput
+              label="Computed (expression)"
+              value={field.computed ?? ""}
+              placeholder="firstName + ' ' + lastName"
+              onChange={(val) => update(field.id, { computed: val })}
+            />
 
             {/* Options editor for select-like fields */}
             {(field.type === "select" ||
@@ -265,6 +265,7 @@ export function Inspector() {
   );
 }
 
+// --- helpers ---
 
 function Labeled({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -279,6 +280,42 @@ function Help({ children }: { children: ReactNode }) {
   return <p className="text-xs opacity-70">{children}</p>;
 }
 
+// Expression editor with live validation
+function ExpressionInput({
+  label,
+  value,
+  placeholder,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  placeholder?: string;
+  onChange: (v: string) => void;
+}) {
+  const error = tryCompile(value);
+
+  return (
+    <div>
+      <Labeled label={label}>
+        <input
+          className={`w-full border rounded px-2 py-1 font-mono text-sm ${
+            error ? "border-red-500" : ""
+          }`}
+          placeholder={placeholder}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      </Labeled>
+      {error ? (
+        <p className="text-xs text-red-600">❌ {error}</p>
+      ) : value?.trim() ? (
+        <p className="text-xs text-green-600">✅ valid</p>
+      ) : null}
+    </div>
+  );
+}
+
+// Options editor for select/radio
 function OptionsEditor({ field }: { field: SelectField }) {
   const update = useDesignerStore((s) => s.updateField);
 
@@ -288,7 +325,9 @@ function OptionsEditor({ field }: { field: SelectField }) {
     } as Partial<SelectField>);
 
   const set = (i: number, key: "label" | "value", v: string) => {
-    const next = field.options.map((o, idx) => (idx === i ? { ...o, [key]: v } : o));
+    const next = field.options.map((o, idx) =>
+      idx === i ? { ...o, [key]: v } : o
+    );
     update(field.id, { options: next } as Partial<SelectField>);
   };
 
