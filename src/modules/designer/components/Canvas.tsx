@@ -1,34 +1,11 @@
+// src/modules/designer/components/Canvas.tsx
 "use client";
-
-import { useDroppable } from "@dnd-kit/core";
+import { DndContext, PointerSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useDesignerStore } from "@/modules/designer/store";
 import type { Field } from "@/modules/schema/types";
-
-function RootContainer({ children }: { children: React.ReactNode }) {
-  const { setNodeRef, isOver } = useDroppable({ id: "root", data: { containerId: "root" } });
-  return (
-    <div
-      ref={setNodeRef}
-      className={`min-h-[200px] rounded p-2 ${isOver ? "outline outline-2 outline-blue-400" : ""}`}
-    >
-      {children}
-    </div>
-  );
-}
-
-function SectionDroppable({ sectionId, children }: { sectionId: string; children: React.ReactNode }) {
-  const { setNodeRef, isOver } = useDroppable({ id: `section-${sectionId}` });
-  return (
-    <div
-      ref={setNodeRef}
-      className={`${isOver ? "outline outline-2 outline-blue-400" : ""}`}
-    >
-      {children}
-    </div>
-  );
-}
+import { createField } from "@/modules/designer/factories";
 
 function TopRow({ f, index }: { f: Field; index: number }) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
@@ -38,7 +15,7 @@ function TopRow({ f, index }: { f: Field; index: number }) {
   const style: React.CSSProperties = { transform: CSS.Transform.toString(transform), transition };
   const select = useDesignerStore((s) => s.select);
   const remove = useDesignerStore((s) => s.removeField);
-
+  const addChild = useDesignerStore((s) => s.addChild);
   return (
     <div ref={setNodeRef} style={style} className="border rounded bg-white">
       <div
@@ -58,19 +35,42 @@ function TopRow({ f, index }: { f: Field; index: number }) {
           <div className="text-xs opacity-70">type: {f.type} • key: {"key" in f ? (f as any).key : ""}</div>
         </div>
         <div className="flex gap-2">
-          <button type="button" className="cursor-grab" aria-label="Drag" {...attributes} {...listeners} onClick={(e) => e.stopPropagation()}>
+          <button
+            type="button"
+            className="cursor-grab"
+            aria-label="Drag"
+            {...attributes}
+            {...listeners}
+            onClick={(e) => e.stopPropagation()}
+          >
             ↕
           </button>
-          <button type="button" className="underline" onClick={(e) => { e.stopPropagation(); select(f.id); }}>
+          <button
+            type="button"
+            className="underline"
+            onClick={(e) => {
+              e.stopPropagation();
+              select(f.id);
+            }}
+          >
             edit
           </button>
-          <button type="button" className="underline text-red-600" onClick={(e) => { e.stopPropagation(); remove(f.id); }}>
+          <button
+            type="button"
+            className="underline text-red-600"
+            onClick={(e) => {
+              e.stopPropagation();
+              remove(f.id);
+            }}
+          >
             remove
           </button>
         </div>
       </div>
 
-      {f.type === "section" && <SectionChildren parent={f} />}
+      {f.type === "section" && (
+        <SectionChildren parent={f} addChild={addChild} />
+      )}
     </div>
   );
 }
@@ -83,7 +83,6 @@ function ChildRow({ parentId, f, index }: { parentId: string; f: Field; index: n
   const style: React.CSSProperties = { transform: CSS.Transform.toString(transform), transition };
   const select = useDesignerStore((s) => s.select);
   const remove = useDesignerStore((s) => s.removeField);
-
   return (
     <div
       ref={setNodeRef}
@@ -104,13 +103,34 @@ function ChildRow({ parentId, f, index }: { parentId: string; f: Field; index: n
         <div className="text-xs opacity-70">type: {f.type} • key: {"key" in f ? (f as any).key : ""}</div>
       </div>
       <div className="flex gap-2">
-        <button type="button" className="cursor-grab" aria-label="Drag" {...attributes} {...listeners} onClick={(e) => e.stopPropagation()}>
+        <button
+          type="button"
+          className="cursor-grab"
+          aria-label="Drag"
+          {...attributes}
+          {...listeners}
+          onClick={(e) => e.stopPropagation()}
+        >
           ↕
         </button>
-        <button type="button" className="underline" onClick={(e) => { e.stopPropagation(); select(f.id); }}>
+        <button
+          type="button"
+          className="underline"
+          onClick={(e) => {
+            e.stopPropagation();
+            select(f.id);
+          }}
+        >
           edit
         </button>
-        <button type="button" className="underline text-red-600" onClick={(e) => { e.stopPropagation(); remove(f.id); }}>
+        <button
+          type="button"
+          className="underline text-red-600"
+          onClick={(e) => {
+            e.stopPropagation();
+            remove(f.id);
+          }}
+        >
           remove
         </button>
       </div>
@@ -118,38 +138,58 @@ function ChildRow({ parentId, f, index }: { parentId: string; f: Field; index: n
   );
 }
 
-function SectionChildren({ parent }: { parent: Field }) {
+function SectionChildren({ parent, addChild }: { parent: Field; addChild: (parentId: string, child: Field) => void }) {
   const children: Field[] = (parent as any).children ?? [];
   return (
-    <SectionDroppable sectionId={parent.id}>
-      <div className="pl-4 pb-2 space-y-2">
-        <div className="space-y-2">
-          <SortableContext items={children.map((c) => c.id)} strategy={verticalListSortingStrategy}>
-            {children.length ? (
-              children.map((c, i) => <ChildRow key={c.id} parentId={parent.id} f={c} index={i} />)
-            ) : (
-              <p className="mx-2 text-xs opacity-70">Drag from Palette into this section or use the Palette add button.</p>
-            )}
-          </SortableContext>
-        </div>
+    <div className="pl-4 pb-2 space-y-2">
+      <div className="flex gap-2 px-2">
+        <button type="button" className="border rounded px-2 py-0.5 text-xs" onClick={() => addChild(parent.id, createField("text", "Text") as any)}>+ Text</button>
+        <button type="button" className="border rounded px-2 py-0.5 text-xs" onClick={() => addChild(parent.id, createField("number", "Number") as any)}>+ Number</button>
+        <button type="button" className="border rounded px-2 py-0.5 text-xs" onClick={() => addChild(parent.id, createField("select", "Select") as any)}>+ Select</button>
       </div>
-    </SectionDroppable>
+      <SortableContext items={children.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+        <div className="space-y-2">
+          {children.length ? (
+            children.map((c, i) => <ChildRow key={c.id} parentId={parent.id} f={c} index={i} />)
+          ) : (
+            <p className="mx-2 text-xs opacity-70">No children yet — use the buttons above to add.</p>
+          )}
+        </div>
+      </SortableContext>
+    </div>
   );
 }
 
 export function Canvas() {
   const fields = useDesignerStore((s) => s.schema.fields);
+  const moveField = useDesignerStore((s) => s.moveField);
+  const moveChild = useDesignerStore((s) => s.moveChild);
+  const sensors = useSensors(useSensor(PointerSensor));
+
+  const onDragEnd = (e: DragEndEvent) => {
+    const activeContainer = e.active.data.current?.containerId as string | undefined;
+    const overContainer = e.over?.data.current?.containerId as string | undefined;
+    const fromIndex = e.active.data.current?.index as number | undefined;
+    const toIndex = e.over?.data.current?.index as number | undefined;
+    if (!activeContainer || !overContainer || fromIndex === undefined || toIndex === undefined) return;
+    if (activeContainer !== overContainer) return;
+    if (activeContainer === "root") {
+      if (fromIndex !== toIndex) moveField(fromIndex, toIndex);
+      return;
+    }
+    if (fromIndex !== toIndex) moveChild(activeContainer, fromIndex, toIndex);
+  };
 
   return (
-    <RootContainer>
+    <DndContext sensors={sensors} onDragEnd={onDragEnd}>
       <SortableContext items={fields.map((f) => f.id)} strategy={verticalListSortingStrategy}>
-        {fields.length === 0 && <p className="opacity-70">Drag from the palette or click to add →</p>}
         <div className="space-y-2">
+          {fields.length === 0 && <p className="opacity-70">Add fields from the palette →</p>}
           {fields.map((f, i) => (
             <TopRow key={f.id} f={f} index={i} />
           ))}
         </div>
       </SortableContext>
-    </RootContainer>
+    </DndContext>
   );
 }
